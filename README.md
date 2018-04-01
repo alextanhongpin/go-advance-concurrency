@@ -2,6 +2,8 @@
 Go Concurrency 101
 
 
+More in the [wiki](https://github.com/alextanhongpin/go-advanced-concurrency/wiki).
+
 - Concurrency is the independent executions of goroutines.
 - Functions are created as goroutines with the keyword go.
 - Goroutines are executed within the scope of a logical processor that owns a single operating system thread and run queue.

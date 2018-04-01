@@ -1,0 +1,20 @@
+digraph G {
+  "generator" -> "copier"
+   
+  "copier" -> "filter (even)"
+  "copier" -> "filter (odd)"
+
+  "filter (even)" -> "splitter (>N)"
+  "filter (even)" -> "splitter (<=N)"
+  
+  "filter (odd)" -> "sharder (1)"
+  "filter (odd)" -> "sharder (2)"
+
+  "splitter (>N)" -> "merger"
+  "splitter (<=N)" -> "merger"
+  
+  "sharder (1)" -> "merger"
+  "sharder (2)" -> "merger"
+
+  "merger" -> "out"
+}

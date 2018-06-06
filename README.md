@@ -35,3 +35,30 @@ There are a few conditions for deadlock to occur, which are called Coffman Condi
 
 Starvation is any situation where a concurrent process cannot get all the resources it needs to perform work.
 
+## Data Race Issue
+
+### Returning slice getters
+
+This will cause data race, since slice is a reference even when it is passed as value:
+
+```go
+func (b *EpsilonGreedy) GetCounts() []int {
+ 	b.RLock()
+ 	defer b.RUnlock()
+
+	return b.Counts
+}
+```
+
+Correct way:
+
+```go
+func (b *EpsilonGreedy) GetCounts() []int {
+ 	b.RLock()
+ 	defer b.RUnlock()
+
+  sCopy := make([]int, len(b.Counts))
+  copy(sCopy, b.Counts)
+	return sCopy
+}
+```

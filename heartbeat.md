@@ -216,3 +216,82 @@ func main() {
 	}
 }
 ```
+
+## Heartbeat at fixed interval
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+type Builder interface {
+	SetContent()
+}
+
+func main() {
+
+	doWork := func(done chan interface{}, in <-chan interface{}) <-chan interface{} {
+		outStream := make(chan interface{})
+		ticker := time.NewTicker(1 * time.Second)
+		go func() {
+			defer close(outStream)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-done:
+					return
+				case t := <-ticker.C:
+					fmt.Println("heartbeat", t)
+				default:
+				}
+
+				select {
+				case <-done:
+					return
+				case i, ok := <-in:
+					if !ok {
+						return
+					}
+					outStream <- i
+				case <-done:
+					return
+				}
+			}
+		}()
+		return outStream
+	}
+
+	generator := func(done chan interface{}, values ...interface{}) <-chan interface{} {
+		outStream := make(chan interface{})
+		go func() {
+			defer close(outStream)
+			for _, v := range values {
+				time.Sleep(500 * time.Millisecond)
+
+				select {
+				case <-done:
+					return
+				case outStream <- v:
+				}
+
+			}
+		}()
+		return outStream
+	}
+
+	done := make(chan interface{})
+	go func() {
+		time.Sleep(10 * time.Second)
+		close(done)
+	}()
+	nums := []interface{}{1, 2, 3, 4, 5, 6, 7, 8, 9}
+	result := doWork(done, generator(done, nums...))
+	for res := range result {
+		fmt.Println(res)
+	}
+	fmt.Println("exiting")
+}
+```

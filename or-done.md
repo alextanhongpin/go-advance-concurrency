@@ -1,3 +1,5 @@
+# Basic 
+```go
 package main
 
 import (
@@ -53,3 +55,50 @@ func main() {
 		fmt.Print(val)
 	}
 }
+```
+
+## With closed channel
+
+```go
+package main
+
+import "fmt"
+
+func orDone(
+	done chan interface{},
+	in <-chan interface{},
+) <-chan interface{} {
+	outStream := make(chan interface{})
+	go func() {
+		defer close(outStream)
+		for {
+			select {
+			case <-done:
+				return
+			case v, ok := <-in:
+				if !ok {
+					return
+				}
+				select {
+				case outStream <- v:
+				case <-done:
+				}
+			}
+		}
+	}()
+	return outStream
+}
+
+func main() {
+	done := make(chan interface{})
+	defer close(done)
+
+	in := make(chan interface{})
+	close(in)
+	
+	result := orDone(done, in)
+	for res := range result {
+		fmt.Println(res)
+	}
+}
+```

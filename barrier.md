@@ -79,3 +79,7 @@ func main() {
 	fmt.Println("exiting")
 }
 ```
+
+
+## References
+- https://medium.com/golangspec/reusable-barriers-in-golang-156db1f75d0b

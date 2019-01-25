@@ -180,6 +180,18 @@ func (w *WorkerPool) Start(n int) *sync.WaitGroup {
 	return w.wg
 }
 
+func (w *WorkerPool) AddWorker() {
+	w.mu.Lock()
+	w.wg.Add(1)
+	go w.loop()
+	w.mu.Unlock()
+	fmt.Println("add 1 worker")
+}
+
+func (w *WorkerPool) RemoveWorker() {
+	w.quit <- struct{}{}
+}
+
 func (w *WorkerPool) AddTask(tasks ...Task) {
 	for _, task := range tasks {
 		select {
@@ -193,7 +205,10 @@ func (w *WorkerPool) AddTask(tasks ...Task) {
 }
 
 func (w *WorkerPool) loop() {
-	defer w.wg.Done()
+	defer func() {
+		fmt.Println("worker stopped")
+		w.wg.Done()
+	}()
 	for {
 		select {
 		case <-w.busCh:
@@ -230,12 +245,23 @@ func main() {
 	done := make(chan interface{})
 	pool := NewWorkerPool(done, 100)
 
-	numWorkers := 10
+	numWorkers := 1
 
 	// Create a new worker pool with n workers.
 	job := pool.Start(numWorkers)
 
 	go generator(pool, 100)
+
+	go func() {
+		time.Sleep(1 * time.Second)
+
+		for i := 0; i < 5; i++ {
+			pool.AddWorker()
+		}
+		pool.RemoveWorker()
+		pool.RemoveWorker()
+	}()
+	
 	reader := func() {
 		// We can chain the pipeline.
 		for res := range multiplier(done, pool.outCh, 2) {

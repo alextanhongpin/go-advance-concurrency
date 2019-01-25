@@ -123,3 +123,173 @@ func main() {
 	wait()
 }
 ```
+
+
+## Worker with Pipeline
+
+```go
+package main
+
+import (
+	"fmt"
+	"math/rand"
+	"sync"
+	"time"
+)
+
+type Result struct {
+	Response interface{}
+	Err      error
+}
+
+type Task interface {
+	Execute() Result
+}
+
+type WorkerPool struct {
+	wg     *sync.WaitGroup
+	mu     *sync.RWMutex
+	once   *sync.Once
+	quit   chan interface{} // Own quit channel.
+	busCh  chan interface{} // Global quit channel.
+	taskCh chan Task
+
+	outCh chan Result
+
+	counter int
+}
+
+func NewWorkerPool(busCh chan interface{}, taskLimit int) *WorkerPool {
+	return &WorkerPool{
+		busCh:  busCh,
+		mu:     new(sync.RWMutex),
+		quit:   make(chan interface{}),
+		taskCh: make(chan Task, taskLimit),
+		once:   new(sync.Once),
+		wg:     new(sync.WaitGroup),
+		outCh:  make(chan Result),
+	}
+}
+
+func (w *WorkerPool) Start(n int) *sync.WaitGroup {
+	w.wg.Add(n)
+	for i := 0; i < n; i++ {
+		go w.loop()
+	}
+	fmt.Printf("started %d workers\n", n)
+	return w.wg
+}
+
+func (w *WorkerPool) AddTask(tasks ...Task) {
+	for _, task := range tasks {
+		select {
+		case <-w.busCh:
+			return
+		case <-w.quit:
+			return
+		case w.taskCh <- task:
+		}
+	}
+}
+
+func (w *WorkerPool) loop() {
+	defer w.wg.Done()
+	for {
+		select {
+		case <-w.busCh:
+			return
+		case <-w.quit:
+			return
+		case task, ok := <-w.taskCh:
+			if !ok {
+				return
+			}
+			res := task.Execute()
+
+			w.mu.Lock()
+			w.counter++
+			w.mu.Unlock()
+
+			fmt.Println("task:", res.Response)
+			select {
+			case <-w.quit:
+				return
+			case w.outCh <- res:
+			}
+		}
+	}
+
+}
+func (w *WorkerPool) Stop() {
+	w.once.Do(func() {
+		close(w.quit)
+	})
+}
+
+func main() {
+	done := make(chan interface{})
+	pool := NewWorkerPool(done, 100)
+
+	numWorkers := 10
+
+	// Create a new worker pool with n workers.
+	job := pool.Start(numWorkers)
+
+	go generator(pool, 100)
+	reader := func() {
+		// We can chain the pipeline.
+		for res := range multiplier(done, pool.outCh, 2) {
+			fmt.Println("output", res)
+		}
+	}
+	go reader()
+	go func() {
+		time.Sleep(5 * time.Second)
+		close(done)
+	}()
+	job.Wait()
+	fmt.Println("exiting", pool.counter)
+}
+
+type DelayTask struct{}
+
+func (d *DelayTask) Execute() Result {
+	time.Sleep(time.Duration(rand.Intn(300)) * time.Millisecond)
+	return Result{
+		Response: 2,
+	}
+}
+
+// Pipelines
+func multiplier(
+	done chan interface{},
+	inCh <-chan Result,
+	m int,
+) <-chan interface{} {
+	outCh := make(chan interface{})
+	go func() {
+		defer close(outCh)
+		for v := range inCh {
+			i, ok := v.Response.(int)
+			if !ok {
+				continue
+			}
+			select {
+			case <-done:
+				return
+			case outCh <- i * 2:
+			}
+		}
+	}()
+	return outCh
+}
+
+func generator(pool *WorkerPool, n int) {
+	for i := 0; i < n; i++ {
+		go func() {
+			time.Sleep(time.Duration(rand.Intn(500)+250) * time.Millisecond)
+			pool.AddTask(&DelayTask{})
+		}()
+	}
+}
+```

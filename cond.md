@@ -156,6 +156,8 @@ func main() {
 
 ## Worker Pool implementation
 
+
+Initially I thought that using `sync.Cond` would be helpful, but it is not necessary. See the implementation below:
 ```go
 package main
 
@@ -255,6 +257,128 @@ func main() {
 	go func() {
 		for i := 0; i < 100; i++ {
 			wp.AddTask(&DelayTask{})
+		}
+	}()
+	go func() {
+		time.Sleep(5 * time.Second)
+		wp.Stop()
+	}()
+
+	job.Wait()
+	fmt.Println("exiting", wp.counter)
+}
+
+type DelayTask struct{}
+
+func (d *DelayTask) Execute() Result {
+	time.Sleep(time.Duration(rand.Intn(300)) * time.Millisecond)
+	return Result{
+		Response: "done",
+	}
+}
+```
+
+
+without `sync.Cond`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"math/rand"
+	"sync"
+	"time"
+)
+
+type Result struct {
+	Response interface{}
+	Err      error
+}
+
+type Task interface {
+	Execute() Result
+}
+
+type WorkerPool struct {
+	wg     *sync.WaitGroup
+	mu     *sync.RWMutex
+	once   *sync.Once
+	quit   chan interface{}
+	taskCh chan Task
+
+	counter int
+}
+
+func NewWorkerPool(taskLimit int) *WorkerPool {
+	return &WorkerPool{
+		mu:     new(sync.RWMutex),
+		quit:   make(chan interface{}),
+		taskCh: make(chan Task, taskLimit),
+		once:   new(sync.Once),
+		wg:     new(sync.WaitGroup),
+	}
+}
+
+func (w *WorkerPool) Start(n int) *sync.WaitGroup {
+	w.wg.Add(n)
+	for i := 0; i < n; i++ {
+		go w.loop()
+	}
+	fmt.Printf("started %d workers\n", n)
+	return w.wg
+}
+
+func (w *WorkerPool) AddTask(tasks ...Task) {
+	for _, task := range tasks {
+		select {
+		case <-w.quit:
+			return
+		case w.taskCh <- task:
+		}
+	}
+}
+
+func (w *WorkerPool) loop() {
+	defer w.wg.Done()
+	for {
+		select {
+		case <-w.quit:
+			return
+		case task, ok := <-w.taskCh:
+			if !ok {
+				return
+			}
+			res := task.Execute()
+
+			w.mu.Lock()
+			w.counter++
+			w.mu.Unlock()
+
+			fmt.Println("task:", res.Response)
+		}
+		fmt.Println("looping")
+	}
+
+}
+func (w *WorkerPool) Stop() {
+	w.once.Do(func() {
+		close(w.quit)
+	})
+}
+
+func main() {
+	wp := NewWorkerPool(100)
+
+	numWorkers := 10
+	job := wp.Start(numWorkers)
+	go func() {
+		for i := 0; i < 100; i++ {
+			go func() {
+				time.Sleep(time.Duration(rand.Intn(500)+250) * time.Millisecond)
+				wp.AddTask(&DelayTask{})
+			}()
+
 		}
 	}()
 	go func() {

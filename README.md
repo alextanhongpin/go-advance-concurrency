@@ -57,8 +57,8 @@ func (b *EpsilonGreedy) GetCounts() []int {
  	b.RLock()
  	defer b.RUnlock()
 
-  sCopy := make([]int, len(b.Counts))
-  copy(sCopy, b.Counts)
+	sCopy := make([]int, len(b.Counts))
+	copy(sCopy, b.Counts)
 	return sCopy
 }
 ```

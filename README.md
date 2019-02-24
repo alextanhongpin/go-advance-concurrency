@@ -62,3 +62,10 @@ func (b *EpsilonGreedy) GetCounts() []int {
 	return sCopy
 }
 ```
+
+## TODO
+
+- gracefully shutting down channels
+- ensure all the consumer channels are flushed before shutting them down
+- how to register different channel type for events
+- how to create event emitter like nodejs

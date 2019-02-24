@@ -1,3 +1,103 @@
+## Basic worker with graceful shutdown
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+	"time"
+)
+
+func main() {
+	fmt.Println("Hello, playground")
+	mgr := NewTaskManager()
+	// Start 3 worker.
+	for i := 0; i < 3; i++ {
+		mgr.Start()
+	}
+
+	go func() {
+		// Send message to workers.
+		for i := 100; i < 200; i++ {
+			msg := fmt.Sprintf("work %d", i)
+			if sent := mgr.Send(msg); sent {
+				fmt.Println("sent", msg)
+			}
+		}
+	}()
+
+	go func() {
+		// Send message to workers.
+		for i := 0; i < 100; i++ {
+			msg := fmt.Sprintf("work %d", i)
+			if sent := mgr.Send(msg); sent {
+				fmt.Println("sent", msg)
+			}
+		}
+	}()
+	time.Sleep(2 * time.Second)
+	mgr.Stop()
+	fmt.Println("terminating")
+}
+
+type TaskManager struct {
+	ch   chan interface{}
+	done sync.WaitGroup
+	quit chan interface{}
+}
+
+func NewTaskManager() *TaskManager {
+	return &TaskManager{
+		ch:   make(chan interface{}),
+		quit: make(chan interface{}),
+	}
+}
+
+func (t *TaskManager) Start() {
+	t.done.Add(1)
+	go func() {
+		defer t.done.Done()
+		for {
+			select {
+			case <-t.quit:
+				fmt.Println("quitting", len(t.ch))
+				return
+			case evt, ok := <-t.ch:
+				if !ok {
+					return
+				}
+				time.Sleep(1 * time.Second)
+				fmt.Println("received evt", evt)
+			}
+		}
+	}()
+}
+
+func (t *TaskManager) Stop() {
+	fmt.Println("stopping")
+
+	close(t.quit)
+	t.done.Wait()
+
+	fmt.Println("stopped")
+}
+
+func (t *TaskManager) Send(evt interface{}) bool {
+	// Add a consumer task to keep track of messages sent.
+
+	select {
+	case <-t.quit:
+		return false
+	case t.ch <- evt:
+		return true
+	case <-time.After(5 * time.Second):
+		return false
+	}
+}
+
+```
+
 ## Multiple Background Worker implementation
 
 ```go

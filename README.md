@@ -69,3 +69,27 @@ func (b *EpsilonGreedy) GetCounts() []int {
 - ensure all the consumer channels are flushed before shutting them down
 - how to register different channel type for events
 - how to create event emitter like nodejs
+
+
+## Concurrency Patterns
+
+- producer-consumer
+- active object
+- monitor object
+- half-sync/half-async
+- leader/followers
+- balking pattern
+- barrier
+- double-checked locking
+- guarded suspension
+- nuclear reaction
+- reactor pattern
+- read write lock pattern
+- scheduler pattern
+- thread pool pattern
+- thread-local storage
+
+## References
+
+- https://en.wikipedia.org/wiki/Concurrency_pattern
+- https://sudo.ch/unizh/concurrencypatterns/ConcurrencyPatterns.pdf

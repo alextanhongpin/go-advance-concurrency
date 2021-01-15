@@ -259,3 +259,171 @@ func main() {
 	fmt.Println("Hello, playground")
 }
 ```
+
+## Broker
+
+Another implementation, but using mutex instead of channels:
+
+```go
+package main
+
+import (
+	"fmt"
+	"math/rand"
+	"sync"
+	"time"
+)
+
+type Topic map[chan interface{}]struct{}
+
+type Broker struct {
+	mu     sync.RWMutex
+	topics map[string]Topic
+}
+
+func NewBroker() *Broker {
+	return &Broker{
+		topics: make(map[string]Topic),
+	}
+}
+
+func (b *Broker) hasTopic(topic string) bool {
+	b.mu.RLock()
+	_, exists := b.topics[topic]
+	b.mu.RUnlock()
+
+	return exists
+}
+
+func (b *Broker) createTopic(topic string) bool {
+	if b.hasTopic(topic) {
+		return false
+	}
+
+	b.mu.Lock()
+	b.topics[topic] = make(Topic)
+	b.mu.Unlock()
+
+	return true
+}
+
+func (b *Broker) Publish(topic string, msg interface{}) bool {
+	b.mu.RLock()
+	subscribers, ok := b.topics[topic]
+	b.mu.RUnlock()
+
+	if !ok {
+		return false
+	}
+
+	for sub := range subscribers {
+		sub <- msg
+	}
+	return true
+}
+
+func (b *Broker) Broadcast(msg interface{}) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	for _, subscribers := range b.topics {
+		for sub := range subscribers {
+			sub <- msg
+		}
+	}
+}
+
+func (b *Broker) Subscribe(topic string, subCh chan interface{}) {
+	if !b.hasTopic(topic) {
+		_ = b.createTopic(topic)
+	}
+
+	b.mu.Lock()
+	b.topics[topic][subCh] = struct{}{}
+	b.mu.Unlock()
+}
+
+func (b *Broker) Unsubscribe(topic string, subCh chan interface{}) {
+	b.mu.Lock()
+	delete(b.topics[topic], subCh)
+	if len(b.topics[topic]) == 0 {
+		delete(b.topics, topic)
+	}
+	b.mu.Unlock()
+}
+
+func main() {
+
+	broker := NewBroker()
+	done := make(chan struct{})
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	alice := make(chan interface{})
+	broker.Subscribe("alice", alice)
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-done:
+				return
+			case msg := <-alice:
+				fmt.Println("[alice] received:", msg)
+			}
+		}
+	}()
+
+	john := make(chan interface{})
+	broker.Subscribe("john", john)
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case <-done:
+				return
+			case msg := <-john:
+				fmt.Println("[john] received:", msg)
+			}
+		}
+	}()
+
+	messages := []string{"hello", "world", "this", "is", "amazing"}
+
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		for _, msg := range messages {
+			time.Sleep(time.Duration(rand.Intn(100)+100) * time.Millisecond)
+			_ = broker.Publish("alice", "#"+msg)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		for _, msg := range messages {
+			time.Sleep(time.Duration(rand.Intn(100)+100) * time.Millisecond)
+			_ = broker.Publish("john", "#"+msg)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		for _, msg := range messages {
+			time.Sleep(time.Duration(rand.Intn(100)+100) * time.Millisecond)
+			broker.Broadcast("*" + msg)
+		}
+	}()
+
+	time.Sleep(5 * time.Second)
+	close(done)
+	wg.Wait()
+
+	fmt.Println("exited")
+}
+```

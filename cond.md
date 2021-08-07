@@ -399,3 +399,75 @@ func (d *DelayTask) Execute() Result {
 	}
 }
 ```
+
+## Conditional counting
+
+
+In the implementation below, the goroutines will continue locking until the conditions are fulfilled.
+
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+	"time"
+)
+
+func main() {
+
+	cond := sync.NewCond(&sync.Mutex{})
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	var n int
+
+	go func() {
+		defer wg.Done()
+
+		cond.L.Lock()
+
+		for n != 5 {
+			fmt.Println("thread #1", n)
+			cond.Wait()
+		}
+		fmt.Println("thread #1: done")
+		cond.L.Unlock()
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		cond.L.Lock()
+		// As long as the condition is not fulfilled, the thread remains locked.
+		for n != 10 {
+			fmt.Println("thread #2:", n)
+			cond.Wait()
+		}
+		fmt.Println("thread #2: done")
+		cond.L.Unlock()
+	}()
+
+	go func() {
+		t := time.NewTicker(100 * time.Millisecond)
+		for {
+			select {
+			case <-t.C:
+				cond.L.Lock()
+				n += 1
+				fmt.Println("inc", n)
+				cond.Broadcast()
+				cond.L.Unlock()
+				if n == 10 {
+					return
+				}
+			}
+		}
+	}()
+
+	wg.Wait()
+	fmt.Println("ending", n)
+}
+```

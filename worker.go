@@ -1,29 +1,48 @@
 package main
 
 import (
-	"log"
+	"fmt"
+	"sync"
 	"time"
 )
 
 func main() {
-	concurrency := 5
-	sem := make(chan bool, concurrency)
-	urls := []string{"url1", "url2", "url3", "url4", "url5", "url6", "url7", "url8"}
+	start := time.Now()
+	defer func() {
+		fmt.Println(time.Since(start))
+	}()
 
-	for _, url := range urls {
-		sem <- true
-		log.Println("add sem:", len(sem))
-		go func(url string) {
+	// Set the max concurrency to 5
+	maxConcurrency := 3
+
+	// Use a buffered channel to simulate semaphore.
+	sem := make(chan struct{}, maxConcurrency)
+
+	nTasks := 10
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < nTasks; i++ {
+		// Acquire the semaphore. This will block once it is full.
+		// This will prevent spawning too many goroutines.
+		sem <- struct{}{}
+		wg.Add(1)
+
+		go func(i int) {
+			defer wg.Done()
 			defer func() {
+				// Release the semaphore once it is done.
 				<-sem
-				log.Println("clear sem:", len(sem))
+
+				fmt.Println("done work", i)
 			}()
-			time.Sleep(2 * time.Second)
-			log.Println("Handling url", url)
-		}(url)
+
+			fmt.Println("performing work:", i)
+			time.Sleep(1 * time.Second)
+		}(i)
 	}
-	log.Println("capicity", cap(sem), len(sem))
-	for i := 0; i < cap(sem); i++ {
-		sem <- true
-	}
+
+	wg.Wait()
+
+	fmt.Println("program terminating")
 }

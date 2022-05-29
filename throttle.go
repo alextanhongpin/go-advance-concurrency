@@ -1,75 +1,81 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"time"
 )
 
 func main() {
+	start := time.Now()
+	defer func() {
+		fmt.Println(time.Since(start))
+	}()
 
 	maxTask := 100
 	maxBuff := 5
 	numWorkers := 5
 
-	buff := make(chan interface{}, maxBuff)
+	bufferCh := make(chan interface{}, maxBuff)
 
-	// Fill up buffer first
+	// Fill up buffer first. We will periodically clear the buffer to control the
+	// rate of processing.
 	for i := 0; i < maxBuff; i++ {
-		buff <- i
+		bufferCh <- i
 	}
-	var wg sync.WaitGroup
 
+	var wg sync.WaitGroup
 	wg.Add(maxTask)
-	start := time.Now()
 
 	go func() {
 		// Separate processing
 		for i := 0; i < maxTask; i++ {
+			defer wg.Done()
 			// Run sequentially
-			buff <- i
-			log.Println("do something with...", i)
-			wg.Done()
+			bufferCh <- i
+			log.Println("processing...", i)
 
 			// Run concurrently has no impact if the buffer is filled, since it takes the same amount of time to clear it up
 			// go func(i int) {
-			// 	buff <- i
+			// 	bufferCh <- i
 			// 	log.Println("do something with...", i)
 			// 	wg.Done()
 			// }(i)
 		}
 	}()
 
-	// Run a separate tasks that runs dequeuing every 1 second
-	go func() {
-		// Rate limiter
-		// For example, we want to process 10 items per second
-		// so each of them will take 100ms
-		// If we have 100 items, it will take 10 seconds
+	// Rate limiter
+	// Deque the channel every 100 ms.
+	// The rate is 10 items per second.
 
-		// To speed up the dequeuing process, we create five different workers that will periodically
-		// pull out items from queue
-		for i := 0; i < numWorkers; i++ {
-			go func(i int) {
-				log.Println("worker", i)
-				for _ = range time.Tick(100 * time.Millisecond) {
-					select {
-					case _, ok := <-buff:
-						if !ok {
-							// Will only reach here if the buff channel is closed
-							return
-						}
-					}
-					log.Println("current buffer", len(buff))
+	// To speed up the dequeuing process, we create n different workers that
+	// will periodically pull out items from queue.
+	//
+	// The total duration will then be (number of items) * 100 ms / number of workers.
+	// In this example, 100 * 100 ms / 5 = 2000 ms = 2 second.
+	deque := func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				_, open := <-bufferCh
+				if !open {
+					// Buffer is closed.
+					return
 				}
-			}(i)
+			}
 		}
+	}
 
-		log.Println("throttle complete")
-	}()
+	for i := 0; i < numWorkers; i++ {
+		go deque()
+	}
 
 	wg.Wait()
-	close(buff)
+	close(bufferCh)
 
-	log.Println("done", time.Since(start))
+	fmt.Println("program terminating")
 }

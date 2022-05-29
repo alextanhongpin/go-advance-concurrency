@@ -234,7 +234,7 @@ import (
 )
 
 func main() {
-	bg, stop := NewBackground()
+	bg, stop := NewBackground(5)
 
 	go func() {
 		time.Sleep(500 * time.Millisecond)
@@ -243,7 +243,7 @@ func main() {
 	n := 10
 	for i := 0; i < n; i++ {
 		go func(i int) {
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			bg.Send(i)
 		}(i)
 	}
@@ -260,12 +260,10 @@ type Background struct {
 	quit chan struct{}
 }
 
-func NewBackground() (*Background, func()) {
+func NewBackground(n int) (*Background, func()) {
 	b := &Background{
 		quit: make(chan struct{}),
-		// When using buffered channel, don't forget to clear the channel on quit.
-		// ch:   make(chan int, 1),
-		ch: make(chan int),
+		ch:   make(chan int, n),
 	}
 
 	var once sync.Once
@@ -277,9 +275,9 @@ func NewBackground() (*Background, func()) {
 		// Ensure this is closed once.
 		once.Do(func() {
 			close(b.quit)
-			// Uncomment this when using buffered channel.
-			// Otherwise it will keep returning 0.
-			// close(b.ch)
+			if len(b.ch) > 0 {
+				close(b.ch)
+			}
 			b.wg.Wait()
 			fmt.Println("done")
 		})
@@ -317,11 +315,9 @@ func (b *Background) loop() {
 		case <-b.quit:
 			fmt.Println("quitting")
 			// Uncomment this when using buffered channel to clear the remaining items
-			/*
-				for n := range b.ch {
-					fmt.Println("flushing", n)
-				}
-			*/
+			for len(b.ch) > 0 {
+				fmt.Println("flushing", <-b.ch)
+			}
 			return
 		case n := <-b.ch:
 			fmt.Println("received", n)
@@ -342,8 +338,8 @@ func (b *Background) Send(n int) bool {
 	case <-b.quit:
 		return false
 	case b.ch <- n:
+		fmt.Println("send", n)
 		return true
 	}
-
 }
 ```

@@ -1,3 +1,14 @@
+# Backpressure
+
+## Status
+
+`inactive`
+
+## Context
+
+I can't remember what this example is meant to demonstrate.
+
+```go
 package main
 
 import (
@@ -166,3 +177,5 @@ func main() {
 	fmt.Printf("	produced: %d\n", runCtx.sumProduced)
 	fmt.Printf("	sent: %d\n", runCtx.sumSent)
 }
+
+```

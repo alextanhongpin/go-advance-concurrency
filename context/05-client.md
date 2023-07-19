@@ -1,3 +1,14 @@
+# Canceling context on the client side
+
+## Status
+
+`deprecated`
+
+## Context
+
+Using `transport.CancelRequest` has been deprecated. Instead, pass the context using `req.WithContext(ctx)` or `http.NewRequestWithContext`.
+
+```go
 package main
 
 import (
@@ -67,3 +78,5 @@ func main() {
 
 	fmt.Println("Finished. I'm going home.")
 }
+
+```

@@ -471,3 +471,77 @@ func main() {
 	fmt.Println("ending", n)
 }
 ```
+
+
+## Some possible usecase
+
+
+Signal a pool of background workers to start pooling for messages when the count is > 0. We can dynamically resize the worker pool to certain size (upsize or downsize) based on the available jobs.
+
+
+
+```go
+// You can edit this code!
+// Click here and start typing.
+package main
+
+import (
+	"fmt"
+	"sync"
+	"time"
+)
+
+func main() {
+	p := new(Pooler)
+	p.cond = sync.NewCond(&sync.Mutex{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		p.Wait()
+	}()
+	fmt.Println("Hello, 世界")
+	time.Sleep(time.Second)
+	p.Pool(0)
+	time.Sleep(time.Second)
+	p.Pool(1)
+	wg.Wait()
+	fmt.Println("terminating")
+}
+
+type Pooler struct {
+	cond  *sync.Cond
+	count int
+}
+
+func (p *Pooler) Pool(count int) {
+	p.cond.L.Lock()
+	defer p.cond.L.Unlock()
+
+	// query count
+	if count > 0 {
+		fmt.Println("has count")
+		p.count = count
+		p.cond.Signal()
+		// Do stuff
+		fmt.Println("signalled")
+	} else {
+		fmt.Println("nothing to signal")
+	}
+}
+
+func (p *Pooler) Wait() {
+	p.cond.L.Lock()
+	defer p.cond.L.Unlock()
+
+	for p.count == 0 {
+		fmt.Println("waiting", p.count)
+		p.cond.Wait()
+		// we need another terminating condition to safely terminate this.
+	}
+	p.count--
+	// Do stuff
+	fmt.Println("waited")
+}
+```

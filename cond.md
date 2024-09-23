@@ -505,7 +505,7 @@ func main() {
 	time.Sleep(time.Second)
 	p.Pool(0)
 	time.Sleep(time.Second)
-	p.Pool(1)
+	p.Terminate()
 	wg.Wait()
 	fmt.Println("terminating")
 }
@@ -513,6 +513,7 @@ func main() {
 type Pooler struct {
 	cond  *sync.Cond
 	count int
+	done  bool
 }
 
 func (p *Pooler) Pool(count int) {
@@ -527,8 +528,16 @@ func (p *Pooler) Pool(count int) {
 		// Do stuff
 		fmt.Println("signalled")
 	} else {
+		// p.cond.Signal()
 		fmt.Println("nothing to signal")
 	}
+}
+
+func (p *Pooler) Terminate() {
+	p.cond.L.Lock()
+	defer p.cond.L.Unlock()
+	p.done = true
+	p.cond.Broadcast()
 }
 
 func (p *Pooler) Wait() {
@@ -538,8 +547,13 @@ func (p *Pooler) Wait() {
 	for p.count == 0 {
 		fmt.Println("waiting", p.count)
 		p.cond.Wait()
+		fmt.Println("recev", p.count, p.done)
+		if p.done {
+			break
+		}
 		// we need another terminating condition to safely terminate this.
 	}
+	fmt.Println("decrement")
 	p.count--
 	// Do stuff
 	fmt.Println("waited")

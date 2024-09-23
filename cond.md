@@ -544,13 +544,10 @@ func (p *Pooler) Wait() {
 	p.cond.L.Lock()
 	defer p.cond.L.Unlock()
 
-	for p.count == 0 {
+	for !p.done && p.count == 0 {
 		fmt.Println("waiting", p.count)
 		p.cond.Wait()
 		fmt.Println("recev", p.count, p.done)
-		if p.done {
-			break
-		}
 		// we need another terminating condition to safely terminate this.
 	}
 	fmt.Println("decrement")

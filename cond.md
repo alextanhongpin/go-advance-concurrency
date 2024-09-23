@@ -551,7 +551,7 @@ func (p *Pooler) Wait() {
 		// we need another terminating condition to safely terminate this.
 	}
 	fmt.Println("decrement")
-	p.count--
+	p.count = max(0, p.count - 1)
 	// Do stuff
 	fmt.Println("waited")
 }

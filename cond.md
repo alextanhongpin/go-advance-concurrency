@@ -1,3 +1,12 @@
+When to use sync.Cond vs sync.WaitGroup?
+
+WaitGroup is good if the size of the task to do is static, and known.
+
+For example, you may want to process two API requests concurrently and wait for both of them to complete.
+
+Cond can be used for more dynamic scenarios, e.g. batching a series of API requests. When the number of requests hits the threshold, then execute them.
+
+
 # Basic
 ```golang
 package main
